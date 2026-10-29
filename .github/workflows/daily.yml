@@ -1,0 +1,50 @@
+name: Daily Engineering Log
+
+on:
+  schedule:
+    # 01:17 UTC = 09:17 Asia/Shanghai (UTC+8)
+    - cron: '17 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-engineering-log
+  cancel-in-progress: false
+
+jobs:
+  update-log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Create daily log
+        run: python scripts/daily_log.py
+
+      - name: Commit and push if changed
+        env:
+          COMMIT_NAME: ${{ vars.COMMIT_NAME }}
+          COMMIT_EMAIL: ${{ vars.COMMIT_EMAIL }}
+        run: |
+          if [ -z "$COMMIT_NAME" ] || [ -z "$COMMIT_EMAIL" ]; then
+            echo 'Set repository variables COMMIT_NAME and COMMIT_EMAIL before running.'
+            exit 1
+          fi
+          git config user.name "$COMMIT_NAME"
+          git config user.email "$COMMIT_EMAIL"
+          git add logs/
+          if git diff --cached --quiet; then
+            echo 'No new log for this date.'
+            exit 0
+          fi
+          git commit -m "chore: automated heartbeat $(TZ=Asia/Shanghai date +%F)"
+          git push origin HEAD:${{ github.event.repository.default_branch }}
